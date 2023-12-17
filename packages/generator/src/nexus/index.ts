@@ -62,9 +62,8 @@ export class GenerateNexus extends Generators {
             return;
           }
           if (field.outputType.location === 'scalar' && field.outputType.type !== 'DateTime') {
-            fileContent += `t${this.getNullOrList(field)}.${field.outputType.type.toLowerCase()}('${field.name}'${
-              fieldDocs ? `, {description: \`${fieldDocs}\`}` : ''
-            })\n`;
+            fileContent += `t${this.getNullOrList(field)}.${field.outputType.type.toLowerCase()}('${field.name}'${fieldDocs ? `, {description: \`${fieldDocs}\`}` : ''
+              })\n`;
           } else {
             fileContent += `t${this.getNullOrList(field)}.field('${field.name}'${options})\n`;
           }
@@ -152,8 +151,26 @@ export class GenerateNexus extends Generators {
     const text: string[] = [`${this.getImport('{ enumType, inputObjectType, objectType }', 'nexus')}`, ''];
     const exportModels: string[] = [];
     if (data) {
-      const enums = [...data.enumTypes.prisma];
+      let enums = [...data.enumTypes.prisma];
       if (data.enumTypes.model) enums.push(...data.enumTypes.model);
+      let inputObjectTypes = [...data.inputObjectTypes.prisma];
+      let outputObjectTypes = [...data.outputObjectTypes.prisma];
+      if (this.options.disableMutations) {
+        inputObjectTypes = inputObjectTypes.filter(t => !(t.name.includes("Upsert") || t.name.includes("Update") || t.name.includes("Delete") || t.name.includes("Create")))
+      }
+      if (!!this.options.models) {
+        const allModels = data.outputObjectTypes.model.map(m => m.name);
+        const wantedModels = this.options.models!;
+        const excludedModels = allModels.filter(m => !wantedModels.includes(m));
+
+        console.log("All models: " + JSON.stringify(allModels));
+        console.log("Wanted models: " + JSON.stringify(wantedModels));
+        console.log("Excluded models:" + JSON.stringify(excludedModels));
+
+        inputObjectTypes = inputObjectTypes.filter(t => !excludedModels.some(excluded => t.name.includes(excluded)));
+        outputObjectTypes = outputObjectTypes.filter(t => !excludedModels.some(excluded => t.name.includes(excluded)));
+        enums = enums.filter(t => !excludedModels.some(excluded => t.name.includes(excluded)));
+      }
       enums.forEach((item) => {
         exportModels.push(item.name);
         text.push(`${!this.isJS ? 'export ' : ''} const ${item.name} = enumType({
@@ -161,7 +178,6 @@ export class GenerateNexus extends Generators {
               members: ${JSON.stringify(item.values)},
             })\n`);
       });
-      const inputObjectTypes = [...data.inputObjectTypes.prisma];
       if (data.inputObjectTypes.model) inputObjectTypes.push(...data.inputObjectTypes.model);
       inputObjectTypes.forEach((input) => {
         const inputFields =
@@ -188,7 +204,7 @@ export class GenerateNexus extends Generators {
           text.push(`},\n});\n`);
         }
       });
-      data.outputObjectTypes.prisma
+      outputObjectTypes
         .filter((type) => type.name.includes('Aggregate') || type.name.endsWith('CountOutputType'))
         .forEach((type) => {
           exportModels.push(type.name);
